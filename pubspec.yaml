@@ -1,0 +1,35 @@
+name: rover_controller
+description: Flutter mobile app to control a 4WD metal detecting rover over Bluetooth (HC-05/HC-06).
+
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Bluetooth communication (Classic Bluetooth SPP)
+  flutter_bluetooth_serial: ^0.4.0
+
+  # Audio playback for metal detection alert
+  audioplayers: ^5.2.0
+
+  # Runtime permissions handling (Android 6.0+)
+  permission_handler: ^11.4.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^2.0.0
+
+flutter:
+  uses-material-design: true
+
+  # Asset directories
+  assets:
+    - assets/sounds/beep.mp3
