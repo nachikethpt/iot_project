@@ -1,0 +1,28 @@
+# Arduino
+*.elf
+*.hex
+*.bin
+build/
+.arduino/
+
+# Mac / Windows System Files
+.DS_Store
+Thumbs.db
+
+# If using Flutter (The AI generator will likely suggest this)
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# If using React Native / Node
+node_modules/
+npm-debug.log
+yarn-error.log
+.env
+
+# IDE / Editor Files
+.idea/
+.vscode/
+*.swp
