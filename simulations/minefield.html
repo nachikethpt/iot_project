@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MineBot — Autonomous Mine-Field Rover</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@300;400;600;800&display=swap');
+
+  :root {
+    --bg: #070a06;
+    --panel: #0c100b;
+    --border: #1a2218;
+    --rover: #a8e063;
+    --rover-glow: rgba(168,224,99,0.3);
+    --alert-red: #e74c3c;
+    --text-primary: #d4e8c2;
+    --text-secondary: #5a7a4a;
+    --text-mono: #8bc34a;
+    --accent: #f39c12;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: 'Exo 2', sans-serif;
+    min-height: 100vh;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 16px 14px 40px;
+    background-image:
+      radial-gradient(ellipse at 20% 0%, rgba(40,60,20,0.4) 0%, transparent 60%),
+      radial-gradient(ellipse at 80% 100%, rgba(60,40,10,0.3) 0%, transparent 60%);
+  }
+
+  /* Header */
+  header {
+    width: 100%; max-width: 900px;
+    display: flex; align-items: center; gap: 14px;
+    margin-bottom: 14px; padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .logo {
+    width: 46px; height: 46px; border: 2px solid #5a8a30; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center; font-size: 24px;
+    background: rgba(40,60,20,0.6); box-shadow: 0 0 18px rgba(90,138,48,0.4); flex-shrink: 0;
+  }
+  header h1 { font-size: 1.5rem; font-weight: 800; letter-spacing: 0.05em; line-height: 1.1; }
+  header h1 .r { color: #e74c3c; }
+  header h1 .g { color: #a8e063; }
+  .header-sub {
+    font-family: 'Share Tech Mono', monospace; font-size: 0.6rem;
+    color: var(--text-secondary); letter-spacing: 0.1em; margin-top: 3px;
+  }
+  .hw-badge {
+    margin-left: auto; font-family: 'Share Tech Mono', monospace;
+    font-size: 0.58rem; color: var(--text-mono); text-align: right; line-height: 1.7;
+    border-left: 2px solid var(--border); padding-left: 12px;
+  }
+
+  /* Canvas */
+  .canvas-wrap {
+    position: relative; width: 100%; max-width: 900px;
+    border: 2px solid #2a3a1a; border-radius: 10px; overflow: hidden;
+    box-shadow: 0 0 50px rgba(0,0,0,0.8), inset 0 0 30px rgba(0,0,0,0.4);
+  }
+  .canvas-wrap::before, .canvas-wrap::after {
+    content: '⚠  DANGER — ACTIVE MINEFIELD  ⚠';
+    position: absolute; z-index: 10;
+    font-family: 'Share Tech Mono', monospace; font-size: 0.52rem; font-weight: bold;
+    color: #111;
+    background: repeating-linear-gradient(45deg,#f1c40f 0,#f1c40f 10px,#111 10px,#111 20px);
+    padding: 3px 10px; letter-spacing: 0.14em; pointer-events: none; width: 100%; text-align: center;
+  }
+  .canvas-wrap::before { top: 0; border-radius: 8px 8px 0 0; }
+  .canvas-wrap::after  { bottom: 0; border-radius: 0 0 8px 8px; }
+  canvas { display: block; width: 100%; cursor: crosshair; }
+
+  /* Alert Overlay */
+  #alert-overlay {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    pointer-events: none; opacity: 0; transition: opacity 0.2s; z-index: 20;
+  }
+  #alert-overlay.active { opacity: 1; animation: flashBg 0.5s infinite alternate; pointer-events: all; }
+  @keyframes flashBg {
+    from { background: rgba(150,0,0,0.1); }
+    to   { background: rgba(180,0,0,0.28); }
+  }
+  .alert-box {
+    background: rgba(6,4,4,0.96); border: 2px solid #e74c3c; border-radius: 10px;
+    padding: 22px 36px; text-align: center;
+    box-shadow: 0 0 60px rgba(231,76,60,0.7);
+    animation: flashBorder 0.45s infinite alternate; max-width: 90%;
+  }
+  @keyframes flashBorder {
+    from { box-shadow: 0 0 20px rgba(231,76,60,0.5); border-color: #a93226; }
+    to   { box-shadow: 0 0 70px rgba(231,76,60,1.0); border-color: #ff6b6b; }
+  }
+  .alert-title { font-size: 1.2rem; font-weight: 800; color: #ff3333; letter-spacing: 0.06em; text-shadow: 0 0 24px rgba(255,50,50,0.9); }
+  .alert-sub { font-family: 'Share Tech Mono', monospace; font-size: 0.6rem; color: #7a5050; margin-top: 8px; letter-spacing: 0.04em; line-height: 1.6; }
+  .alert-actions { display: flex; gap: 10px; justify-content: center; margin-top: 14px; }
+
+  /* Shared button base */
+  button {
+    cursor: pointer; border: none; outline: none;
+    font-family: 'Exo 2', sans-serif; font-weight: 600;
+    font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase;
+    border-radius: 7px; padding: 9px 16px; transition: all 0.16s;
+    position: relative; overflow: hidden;
+  }
+  button::after { content:''; position:absolute; inset:0; background:white; opacity:0; transition:opacity 0.12s; }
+  button:active::after { opacity: 0.08; }
+
+  #btn-resume { background:#e67e22; color:#fff; font-size:0.75rem; padding:8px 20px; pointer-events:all; box-shadow:0 0 16px rgba(230,126,34,0.5); }
+  #btn-resume:hover { background:#f39c12; box-shadow:0 0 28px rgba(243,156,18,0.8); }
+  #btn-dismiss { background:transparent; color:#5a6a50; border:1px solid #2a3a1a; font-size:0.75rem; padding:8px 16px; pointer-events:all; }
+  #btn-dismiss:hover { color:var(--text-primary); border-color:#4a6a30; }
+
+  /* Stats */
+  .status-bar {
+    width:100%; max-width:900px; display:grid; grid-template-columns:repeat(5,1fr);
+    gap:7px; margin-top:9px;
+  }
+  .stat { background:var(--panel); border:1px solid var(--border); border-radius:7px; padding:7px 10px; }
+  .stat-label { font-family:'Share Tech Mono',monospace; font-size:0.5rem; color:var(--text-secondary); letter-spacing:0.1em; text-transform:uppercase; }
+  .stat-value { font-family:'Share Tech Mono',monospace; font-size:0.82rem; color:var(--text-mono); margin-top:2px; }
+
+  /* Control panel */
+  .control-panel { width:100%; max-width:900px; margin-top:10px; background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:16px 18px; }
+  .panel-section { margin-bottom:14px; }
+  .panel-section:last-child { margin-bottom:0; }
+  .panel-label {
+    font-family:'Share Tech Mono',monospace; font-size:0.56rem; color:var(--text-secondary);
+    letter-spacing:0.1em; text-transform:uppercase; margin-bottom:8px;
+    display:flex; align-items:center; gap:8px;
+  }
+  .panel-label::after { content:''; flex:1; height:1px; background:var(--border); }
+  .panel-row { display:flex; align-items:center; gap:9px; flex-wrap:wrap; }
+  .divider { width:1px; height:36px; background:var(--border); flex-shrink:0; }
+
+  /* Specific buttons */
+  #btn-start { background:linear-gradient(135deg,#2d6a1a,#3d8a25); color:#c8f0a0; box-shadow:0 0 14px rgba(61,138,37,0.4); border:1px solid #3d8a25; }
+  #btn-start:hover { box-shadow:0 0 24px rgba(80,180,40,0.6); background:linear-gradient(135deg,#356020,#48a02a); }
+  #btn-stop { background:linear-gradient(135deg,#7a1010,#a01818); color:#ffaaaa; box-shadow:0 0 14px rgba(160,24,24,0.4); border:1px solid #a01818; }
+  #btn-stop:hover { box-shadow:0 0 24px rgba(231,76,60,0.6); background:linear-gradient(135deg,#8a1414,#c0392b); }
+  #btn-reset { background:transparent; color:var(--text-secondary); border:1px solid var(--border); }
+  #btn-reset:hover { color:var(--text-primary); border-color:#4a6a30; background:rgba(255,255,255,0.03); }
+  #btn-manual { background:rgba(168,224,99,0.08); color:#a8e063; border:1px solid #3a5a20; }
+  #btn-manual.active { background:rgba(168,224,99,0.2); border-color:#a8e063; box-shadow:0 0 16px rgba(168,224,99,0.3); color:#c8f0a0; }
+  #btn-manual:hover { border-color:#a8e063; }
+
+  .mode-btn { background:rgba(20,30,14,0.8); color:var(--text-secondary); border:1px solid #2a3a1a; flex:1; min-width:110px; line-height:1.3; }
+  .mode-btn:hover { color:var(--text-primary); border-color:#4a7030; background:rgba(40,60,20,0.6); }
+  .mode-btn.active { background:rgba(90,138,48,0.18); border-color:#5a8a30; color:#a8e063; box-shadow:0 0 12px rgba(90,138,48,0.3); }
+
+  /* WASD display */
+  .wasd-wrap {
+    display:flex; flex-direction:column; align-items:center; gap:4px;
+    padding:8px 12px; background:rgba(10,16,8,0.8);
+    border:1px solid var(--border); border-radius:8px;
+  }
+  .wasd-row { display:flex; gap:4px; }
+  .key {
+    width:32px; height:32px; background:rgba(30,46,20,0.8); border:1.5px solid #2a4020;
+    border-radius:5px; display:flex; align-items:center; justify-content:center;
+    font-family:'Share Tech Mono',monospace; font-size:0.75rem; font-weight:bold;
+    color:var(--text-secondary); transition:all 0.08s; box-shadow:0 3px 0 #080e06;
+  }
+  .key.lit {
+    background:rgba(168,224,99,0.25); border-color:#a8e063; color:#c8f0a0;
+    box-shadow:0 0 10px rgba(168,224,99,0.4), 0 2px 0 #080e06; transform:translateY(1px);
+  }
+  .wasd-label { font-family:'Share Tech Mono',monospace; font-size:0.46rem; color:var(--text-secondary); letter-spacing:0.1em; text-align:center; margin-top:2px; }
+
+  .bt-display { font-family:'Share Tech Mono',monospace; font-size:0.58rem; color:var(--text-secondary); line-height:1.7; }
+  .bt-display span { color:var(--text-mono); }
+
+  /* Log */
+  .log-wrap { width:100%; max-width:900px; margin-top:9px; background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:10px 14px; max-height:100px; overflow-y:auto; }
+  .log-wrap::-webkit-scrollbar { width:3px; }
+  .log-wrap::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+  .log-line { font-family:'Share Tech Mono',monospace; font-size:0.6rem; color:var(--text-secondary); line-height:1.9; }
+  .log-line.green  { color:#8bc34a; }
+  .log-line.red    { color:#e74c3c; }
+  .log-line.yellow { color:#f39c12; }
+  .log-line.blue   { color:#5dade2; }
+
+  @media (max-width:600px) {
+    .status-bar { grid-template-columns:repeat(3,1fr); }
+    .hw-badge { display:none; }
+    header h1 { font-size:1.15rem; }
+    .wasd-wrap { display:none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">💣</div>
+  <div>
+    <h1><span class="r">Mine</span><span class="g">Bot</span> Rover</h1>
+    <div class="header-sub">AUTONOMOUS MINEFIELD DETECTION &amp; CLEARANCE SIMULATOR v2.0</div>
+  </div>
+  <div class="hw-badge">
+    Arduino Uno · L293D Shield<br>
+    HC-05 BT [Pins 9/10]<br>
+    555-Timer Metal Detector
+  </div>
+</header>
+
+<div class="canvas-wrap">
+  <canvas id="sim" width="900" height="500"></canvas>
+  <div id="alert-overlay">
+    <div class="alert-box">
+      <div class="alert-title">💥 MINE DETECTED — MOTORS HALTED 💥</div>
+      <div class="alert-sub">Hardware Status: 555-Timer Triggered<br>Sending 'S' STOP command to Arduino via HC-05...</div>
+      <div class="alert-actions">
+        <button id="btn-resume">▶ Resume Mission</button>
+        <button id="btn-dismiss">✕ Dismiss</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="status-bar">
+  <div class="stat"><div class="stat-label">Status</div><div class="stat-value" id="stat-status">IDLE</div></div>
+  <div class="stat"><div class="stat-label">Control</div><div class="stat-value" id="stat-ctrl">AUTO</div></div>
+  <div class="stat"><div class="stat-label">Mode</div><div class="stat-value" id="stat-mode">—</div></div>
+  <div class="stat"><div class="stat-label">Mines Found</div><div class="stat-value" id="stat-found">0 / 0</div></div>
+  <div class="stat"><div class="stat-label">Coverage</div><div class="stat-value" id="stat-coverage">0%</div></div>
+</div>
+
+<div class="control-panel">
+  <div class="panel-section">
+    <div class="panel-label">Primary Controls</div>
+    <div class="panel-row">
+      <button id="btn-start">▶ Start Auto</button>
+      <button id="btn-stop">⏹ E-Stop</button>
+      <button id="btn-reset">↺ Reset</button>
+      <div class="divider"></div>
+      <button id="btn-manual">🕹 Manual WASD</button>
+      <div class="divider"></div>
+      <div class="bt-display">BT CMD →&nbsp;<span id="bt-cmd">—</span></div>
+    </div>
+  </div>
+
+  <div class="panel-section">
+    <div class="panel-label">Auto Pathing Algorithm</div>
+    <div class="panel-row">
+      <button class="mode-btn active" id="mode-0" onclick="selectMode(0)">⟺ S-Curve<br><span style="font-size:0.57rem;font-weight:300;text-transform:none">Lawnmower Sweep</span></button>
+      <button class="mode-btn" id="mode-1" onclick="selectMode(1)">🌀 Spiral<br><span style="font-size:0.57rem;font-weight:300;text-transform:none">Outward Expand</span></button>
+      <button class="mode-btn" id="mode-2" onclick="selectMode(2)">↗ Random<br><span style="font-size:0.57rem;font-weight:300;text-transform:none">Bounce Sweep</span></button>
+      <div class="divider"></div>
+      <div class="wasd-wrap">
+        <div class="wasd-row"><div class="key" id="key-w">W</div></div>
+        <div class="wasd-row">
+          <div class="key" id="key-a">A</div>
+          <div class="key" id="key-s">S</div>
+          <div class="key" id="key-d">D</div>
+        </div>
+        <div class="wasd-label">MANUAL DRIVE</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="log-wrap" id="log"></div>
+
+<script>
+// ─── Canvas ───────────────────────────────────────────────
+const canvas = document.getElementById('sim');
+const ctx    = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+const MARGIN = 44;
+const BOTTOM = H - 26; // leave room for danger tape
+
+// ─── Seeded RNG ───────────────────────────────────────────
+function mulberry32(a) {
+  return function() {
+    a|=0; a=a+0x6D2B79F5|0;
+    var t=Math.imul(a^a>>>15,1|a);
+    t=t+Math.imul(t^t>>>7,61|t)^t;
+    return ((t^t>>>14)>>>0)/4294967296;
+  };
+}
+
+// ─── Offscreen terrain ───────────────────────────────────
+const offscreen = document.createElement('canvas');
+offscreen.width = W; offscreen.height = H;
+const octx = offscreen.getContext('2d');
+
+function buildTerrain() {
+  octx.clearRect(0, 0, W, H);
+
+  // Base dirt gradient
+  const g = octx.createLinearGradient(0, 0, W, H);
+  g.addColorStop(0,   '#2c2212');
+  g.addColorStop(0.4, '#241c0e');
+  g.addColorStop(0.7, '#201a0c');
+  g.addColorStop(1,   '#2a2214');
+  octx.fillStyle = g; octx.fillRect(0, 0, W, H);
+
+  // Mud patches
+  const patches = [
+    {x:130,y:100,rx:90,ry:45,c:'rgba(12,10,5,0.55)'},
+    {x:420,y:210,rx:130,ry:65,c:'rgba(10,8,4,0.45)'},
+    {x:720,y:360,rx:100,ry:55,c:'rgba(14,12,6,0.5)'},
+    {x:200,y:390,rx:80,ry:38,c:'rgba(10,8,4,0.4)'},
+    {x:570,y:90,rx:110,ry:50,c:'rgba(12,10,5,0.42)'},
+    {x:820,y:160,rx:65,ry:38,c:'rgba(14,11,5,0.5)'},
+    {x:60,y:280,rx:70,ry:40,c:'rgba(11,9,4,0.4)'},
+  ];
+  patches.forEach(p => {
+    const pg = octx.createRadialGradient(p.x,p.y,0,p.x,p.y,Math.max(p.rx,p.ry));
+    pg.addColorStop(0, p.c); pg.addColorStop(1, 'transparent');
+    octx.save();
+    octx.scale(1, p.ry/p.rx);
+    octx.beginPath(); octx.arc(p.x, p.y*(p.rx/p.ry), p.rx, 0, Math.PI*2);
+    octx.fillStyle = pg; octx.fill();
+    octx.restore();
+  });
+
+  // Pebbles / rocks
+  const rng = mulberry32(1337);
+  for (let i = 0; i < 320; i++) {
+    const rx = rng()*W, ry = rng()*(H-30);
+    const rs = rng()*3.5+0.8;
+    const cols = ['rgba(45,38,22,0.9)','rgba(60,50,30,0.8)','rgba(30,24,14,0.95)','rgba(70,60,35,0.6)'];
+    octx.beginPath(); octx.arc(rx, ry, rs, 0, Math.PI*2);
+    octx.fillStyle = cols[Math.floor(rng()*cols.length)]; octx.fill();
+  }
+
+  // Surface cracks
+  octx.save();
+  octx.strokeStyle = 'rgba(8,6,3,0.55)'; octx.lineWidth = 1;
+  for (let i = 0; i < 22; i++) {
+    const sx = rng()*W, sy = rng()*(H-30);
+    octx.beginPath(); octx.moveTo(sx, sy);
+    let cx=sx, cy=sy;
+    for (let j=0; j<7; j++) { cx+=(rng()-0.5)*38; cy+=(rng()-0.5)*28; octx.lineTo(cx,cy); }
+    octx.stroke();
+  }
+  octx.restore();
+
+  // Ghost tyre tracks
+  octx.save();
+  octx.strokeStyle = 'rgba(55,44,22,0.22)'; octx.lineWidth = 4;
+  octx.setLineDash([5,10]);
+  for (let i=0; i<4; i++) {
+    const ty = 80 + i*110;
+    octx.beginPath(); octx.moveTo(0,ty); octx.lineTo(W,ty); octx.stroke();
+  }
+  octx.setLineDash([]);
+  octx.restore();
+
+  // Field boundary fence
+  octx.save();
+  octx.strokeStyle = 'rgba(200,160,20,0.3)'; octx.lineWidth = 1.5;
+  octx.setLineDash([14,9]);
+  octx.strokeRect(MARGIN-10, MARGIN-10, W-2*(MARGIN-10), BOTTOM-(MARGIN-10));
+  octx.setLineDash([]);
+  octx.restore();
+
+  // Corner skulls
+  const corners=[[MARGIN-10,MARGIN-10],[W-MARGIN+10,MARGIN-10],[MARGIN-10,BOTTOM],[W-MARGIN+10,BOTTOM]];
+  octx.font='13px serif'; octx.textAlign='center'; octx.textBaseline='middle';
+  corners.forEach(([cx,cy])=>{ octx.fillText('💀',cx,cy); });
+}
+
+// ─── State ────────────────────────────────────────────────
+let animId = null;
+let running = false;
+let halted  = false;
+let manualMode = false;
+let selectedMode = 0;
+let foundCount = 0;
+let pathState = { mode: undefined };
+let pulse = 0;
+
+const ROVER_W=30, ROVER_H=24, SENSOR_R=48;
+const AUTO_SPEED=1.8, MANUAL_SPEED=3.0;
+
+let rover = { x:100, y:100, angle:0, vx:0, vy:0 };
+let trail = [];
+const MAX_TRAIL = 4000;
+const keys = { w:false, a:false, s:false, d:false };
+
+let NUM_MINES;
+let mines = [];
+let craters = [];
+
+// ─── Init ─────────────────────────────────────────────────
+function init() {
+  if (animId) { cancelAnimationFrame(animId); animId=null; }
+  running=false; halted=false;
+  trail=[]; craters=[]; foundCount=0;
+  pathState={mode:undefined};
+  pulse=0;
+
+  rover = { x:MARGIN+30, y:MARGIN+30, angle:0, vx:0, vy:0 };
+
+  NUM_MINES = Math.floor(Math.random()*4)+4; // 4-7
+  mines=[];
+  const mrng = mulberry32(Date.now()&0xFFFF);
+  while (mines.length < NUM_MINES) {
+    const mx = MARGIN+40+mrng()*(W-2*MARGIN-80);
+    const my = MARGIN+40+mrng()*(BOTTOM-MARGIN-80);
+    if (Math.hypot(mx-rover.x,my-rover.y)>110) {
+      mines.push({ x:mx, y:my, r:9, found:false, variant:Math.floor(mrng()*3) });
+    }
+  }
+
+  document.getElementById('alert-overlay').classList.remove('active');
+  setStatus('IDLE','#5a7a4a');
+  setStat('stat-ctrl','AUTO','#5a8a30');
+  document.getElementById('stat-mode').textContent='—';
+  document.getElementById('stat-found').textContent=`0 / ${NUM_MINES}`;
+  document.getElementById('stat-coverage').textContent='0%';
+  document.getElementById('bt-cmd').textContent='—';
+
+  buildTerrain();
+  draw();
+}
+
+// ─── Helpers ──────────────────────────────────────────────
+function setStatus(txt,col) { const e=document.getElementById('stat-status'); e.textContent=txt; e.style.color=col; }
+function setStat(id,txt,col='') { const e=document.getElementById(id); e.textContent=txt; if(col) e.style.color=col; }
+
+function log(msg, cls='') {
+  const el=document.getElementById('log');
+  const ts=new Date().toLocaleTimeString('en-GB',{hour12:false});
+  const line=document.createElement('div');
+  line.className='log-line '+cls; line.textContent=`[${ts}]  ${msg}`;
+  el.appendChild(line); el.scrollTop=el.scrollHeight;
+  if(el.children.length>100) el.removeChild(el.children[0]);
+}
+
+// ─── Draw ─────────────────────────────────────────────────
+function drawScene() {
+  ctx.clearRect(0,0,W,H);
+  ctx.drawImage(offscreen,0,0);
+
+  // Craters
+  craters.forEach(c=>{
+    const cg=ctx.createRadialGradient(c.x,c.y,0,c.x,c.y,c.r);
+    cg.addColorStop(0,'rgba(0,0,0,0.92)'); cg.addColorStop(0.55,'rgba(30,18,8,0.7)'); cg.addColorStop(1,'transparent');
+    ctx.beginPath(); ctx.arc(c.x,c.y,c.r,0,Math.PI*2);
+    ctx.fillStyle=cg; ctx.fill();
+    ctx.strokeStyle='rgba(70,35,8,0.5)'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.arc(c.x,c.y,c.r,0,Math.PI*2); ctx.stroke();
+    // scorch fragments
+    for(let f=0;f<8;f++){
+      const fa=(f/8)*Math.PI*2, fd=c.r*0.6+Math.random()*c.r*0.5;
+      ctx.beginPath(); ctx.arc(c.x+Math.cos(fa)*fd,c.y+Math.sin(fa)*fd,2,0,Math.PI*2);
+      ctx.fillStyle='rgba(40,20,5,0.7)'; ctx.fill();
+    }
+  });
+
+  // Trail
+  if(trail.length>1){
+    ctx.save(); ctx.strokeStyle='rgba(130,170,70,0.2)';
+    ctx.lineWidth=ROVER_W*0.75; ctx.lineCap='round'; ctx.lineJoin='round';
+    ctx.beginPath(); ctx.moveTo(trail[0].x,trail[0].y);
+    for(let i=1;i<trail.length;i++){
+      const dx=trail[i].x-trail[i-1].x,dy=trail[i].y-trail[i-1].y;
+      if(dx*dx+dy*dy>700){ctx.stroke();ctx.beginPath();}
+      ctx.lineTo(trail[i].x,trail[i].y);
+    }
+    ctx.stroke(); ctx.restore();
+  }
+
+  // Mines
+  pulse+=0.045;
+  mines.forEach(m=>{
+    if(m.found) return;
+    const dist=Math.hypot(rover.x-m.x,rover.y-m.y);
+    const prox=Math.max(0,1-dist/(SENSOR_R*3.5));
+
+    // proximity danger glow
+    if(prox>0.05){
+      ctx.save(); ctx.globalAlpha=prox*0.6;
+      const pg=ctx.createRadialGradient(m.x,m.y,0,m.x,m.y,35+prox*25);
+      pg.addColorStop(0,'rgba(255,50,10,0.9)'); pg.addColorStop(1,'transparent');
+      ctx.beginPath(); ctx.arc(m.x,m.y,35+prox*25,0,Math.PI*2);
+      ctx.fillStyle=pg; ctx.fill(); ctx.restore();
+    }
+
+    ctx.save(); ctx.translate(m.x,m.y);
+
+    if(m.variant===0){
+      // Round pressure mine
+      ctx.beginPath(); ctx.arc(0,0,m.r,0,Math.PI*2);
+      ctx.fillStyle='#252515'; ctx.fill();
+      ctx.strokeStyle='#484828'; ctx.lineWidth=1.5; ctx.stroke();
+      for(let k=0;k<5;k++){
+        const kx=Math.cos(k*Math.PI*2/5)*(m.r-3),ky=Math.sin(k*Math.PI*2/5)*(m.r-3);
+        ctx.beginPath(); ctx.arc(kx,ky,1.8,0,Math.PI*2); ctx.fillStyle='#606035'; ctx.fill();
+      }
+      ctx.beginPath(); ctx.arc(0,0,3.5,0,Math.PI*2); ctx.fillStyle='#181808'; ctx.fill();
+
+    } else if(m.variant===1){
+      // Anti-tank box mine
+      ctx.fillStyle='#1e1e10';
+      ctx.beginPath(); ctx.roundRect(-m.r-3,-m.r*0.65,(m.r+3)*2,m.r*1.3,2); ctx.fill();
+      ctx.strokeStyle='#383822'; ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.roundRect(-m.r-3,-m.r*0.65,(m.r+3)*2,m.r*1.3,2); ctx.stroke();
+      ctx.fillStyle='#2e2e18'; ctx.fillRect(-m.r,-m.r*0.3,m.r*2,m.r*0.6);
+      ctx.strokeStyle='#484828'; ctx.lineWidth=1; ctx.strokeRect(-m.r,-m.r*0.3,m.r*2,m.r*0.6);
+
+    } else {
+      // Bounding mine with trip wire
+      ctx.beginPath(); ctx.arc(0,0,m.r,0,Math.PI*2);
+      ctx.fillStyle='#1a1a0c'; ctx.fill();
+      ctx.strokeStyle='#485228'; ctx.lineWidth=2; ctx.stroke();
+      ctx.strokeStyle='#303818'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.arc(0,0,m.r*0.55,0,Math.PI*2); ctx.stroke();
+      // trip wire
+      ctx.strokeStyle='rgba(160,140,40,0.22)'; ctx.lineWidth=0.8;
+      ctx.setLineDash([3,4]);
+      ctx.beginPath(); ctx.moveTo(m.r,0); ctx.lineTo(m.r+24,-10); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    ctx.restore();
+  });
+
+  // Found labels
+  mines.filter(m=>m.found).forEach(m=>{
+    ctx.save(); ctx.globalAlpha=0.65;
+    ctx.font='bold 10px "Share Tech Mono"'; ctx.fillStyle='#e74c3c';
+    ctx.textAlign='center'; ctx.fillText('NEUTRALIZED',m.x,m.y-20);
+    ctx.restore();
+  });
+}
+
+function drawRover(){
+  ctx.save(); ctx.translate(rover.x,rover.y); ctx.rotate(rover.angle);
+  pulse+=0; // already incremented in drawScene
+
+  // Outer sensor ring (pulsing)
+  const pr=SENSOR_R+Math.sin(pulse*2.2)*5;
+  ctx.beginPath(); ctx.arc(0,0,pr,0,Math.PI*2);
+  ctx.fillStyle=halted?'rgba(231,76,60,0.04)':'rgba(168,224,99,0.05)'; ctx.fill();
+  ctx.strokeStyle=halted?'rgba(231,76,60,0.5)':'rgba(168,224,99,0.3)';
+  ctx.lineWidth=1.2; ctx.setLineDash([6,5]); ctx.stroke(); ctx.setLineDash([]);
+
+  // Inner ring
+  ctx.beginPath(); ctx.arc(0,0,SENSOR_R*0.5,0,Math.PI*2);
+  ctx.strokeStyle=halted?'rgba(231,76,60,0.2)':'rgba(168,224,99,0.1)';
+  ctx.lineWidth=0.8; ctx.stroke();
+
+  ctx.shadowColor=halted?'#e74c3c':'#a8e063'; ctx.shadowBlur=18;
+
+  // Body
+  ctx.fillStyle=halted?'#5a1010':'#2e4a1a';
+  ctx.beginPath(); ctx.roundRect(-ROVER_W/2,-ROVER_H/2,ROVER_W,ROVER_H,5); ctx.fill();
+
+  // Armor plate
+  ctx.fillStyle=halted?'#3a0c0c':'#243c12';
+  ctx.fillRect(-ROVER_W/2+3,-ROVER_H/2+3,ROVER_W-6,ROVER_H-6);
+
+  // Antenna
+  ctx.shadowBlur=0;
+  ctx.strokeStyle=halted?'#ff4444':'#8bc34a'; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.moveTo(-ROVER_W/2+5,-ROVER_H/2); ctx.lineTo(-ROVER_W/2+5,-ROVER_H/2-10); ctx.stroke();
+  ctx.beginPath(); ctx.arc(-ROVER_W/2+5,-ROVER_H/2-10,2.5,0,Math.PI*2);
+  ctx.fillStyle=halted?'#ff5555':'#a8e063'; ctx.shadowBlur=8; ctx.fill();
+
+  // Metal detector arm (front)
+  ctx.shadowBlur=0;
+  ctx.strokeStyle='#4a5a30'; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(ROVER_W/2-2,0); ctx.lineTo(ROVER_W/2+9,0); ctx.stroke();
+  ctx.beginPath(); ctx.arc(ROVER_W/2+9,0,5,0,Math.PI*2);
+  ctx.strokeStyle=halted?'#ff6666':'#a8e063';
+  ctx.shadowColor=halted?'#ff0000':'#a8e063'; ctx.shadowBlur=12; ctx.stroke();
+
+  // Status LED
+  ctx.shadowBlur=6;
+  ctx.beginPath(); ctx.arc(0,-ROVER_H/2+5,2.5,0,Math.PI*2);
+  ctx.fillStyle=halted?'#ff2222':(running||manualMode)?'#a8e063':'#2a4a12'; ctx.fill();
+
+  // Tracks
+  ctx.shadowBlur=0;
+  [[-ROVER_W/2-3,-ROVER_H/2+2],[ROVER_W/2-2,-ROVER_H/2+2]].forEach(([tx,ty])=>{
+    const tw=5,th=ROVER_H-4;
+    ctx.fillStyle='#1a2810'; ctx.fillRect(tx,ty,tw,th);
+    ctx.fillStyle='#243818';
+    for(let t=0;t<4;t++) ctx.fillRect(tx+1,ty+t*(th/4)+1,tw-2,th/4-2);
+  });
+
+  ctx.restore();
+}
+
+function draw(){ drawScene(); drawRover(); }
+
+// ─── Paths ────────────────────────────────────────────────
+function initPath(mode){
+  if(mode===0){
+    const rows=Math.ceil((BOTTOM-MARGIN*2)/(ROVER_H*2.8));
+    pathState={mode:0,row:0,rows,stepY:(BOTTOM-MARGIN*2)/rows};
+    rover.x=MARGIN; rover.y=MARGIN; rover.vx=AUTO_SPEED*1.5; rover.vy=0; rover.angle=0;
+  } else if(mode===1){
+    pathState={mode:1,t:0,a:2,b:8};
+    rover.x=W/2; rover.y=BOTTOM/2;
+  } else {
+    const ang=Math.random()*Math.PI*2;
+    pathState={mode:2};
+    rover.vx=Math.cos(ang)*AUTO_SPEED*1.7; rover.vy=Math.sin(ang)*AUTO_SPEED*1.7; rover.angle=ang;
+  }
+}
+
+function stepAuto(){
+  const m=pathState.mode;
+  if(m===0){
+    rover.x+=rover.vx;
+    if(rover.vx>0&&rover.x>=W-MARGIN){ rover.x=W-MARGIN; pathState.row++; if(pathState.row>=pathState.rows){stopSim('Sweep complete!',true);return;} rover.y+=pathState.stepY; rover.vx=-AUTO_SPEED*1.5; rover.angle=Math.PI; }
+    else if(rover.vx<0&&rover.x<=MARGIN){ rover.x=MARGIN; pathState.row++; if(pathState.row>=pathState.rows){stopSim('Sweep complete!',true);return;} rover.y+=pathState.stepY; rover.vx=AUTO_SPEED*1.5; rover.angle=0; }
+    rover.y=Math.min(rover.y,BOTTOM-10);
+  } else if(m===1){
+    pathState.t+=0.016;
+    const r=pathState.a+pathState.b*pathState.t;
+    const px=W/2+r*Math.cos(pathState.t), py=BOTTOM/2+r*Math.sin(pathState.t)*0.86;
+    rover.angle=Math.atan2(py-rover.y,px-rover.x); rover.x=px; rover.y=py;
+    if(px<MARGIN||px>W-MARGIN||py<MARGIN||py>BOTTOM-10){stopSim('Spiral complete!',true);return;}
+  } else {
+    rover.x+=rover.vx; rover.y+=rover.vy;
+    let b=false;
+    if(rover.x<MARGIN){rover.x=MARGIN;rover.vx*=-1;b=true;}
+    if(rover.x>W-MARGIN){rover.x=W-MARGIN;rover.vx*=-1;b=true;}
+    if(rover.y<MARGIN){rover.y=MARGIN;rover.vy*=-1;b=true;}
+    if(rover.y>BOTTOM-10){rover.y=BOTTOM-10;rover.vy*=-1;b=true;}
+    if(b){
+      const j=(Math.random()-0.5)*0.5; rover.vx+=j; rover.vy+=j;
+      const sp=Math.hypot(rover.vx,rover.vy);
+      rover.vx=rover.vx/sp*AUTO_SPEED*1.7; rover.vy=rover.vy/sp*AUTO_SPEED*1.7;
+      rover.angle=Math.atan2(rover.vy,rover.vx);
+    }
+  }
+}
+
+function stepManual(){
+  let dx=0,dy=0;
+  if(keys.w) dy-=1; if(keys.s) dy+=1;
+  if(keys.a) dx-=1; if(keys.d) dx+=1;
+  if(dx!==0||dy!==0){
+    const len=Math.hypot(dx,dy);
+    dx=dx/len*MANUAL_SPEED; dy=dy/len*MANUAL_SPEED;
+    rover.angle=Math.atan2(dy,dx);
+  }
+  rover.x=Math.max(MARGIN,Math.min(W-MARGIN,rover.x+dx));
+  rover.y=Math.max(MARGIN,Math.min(BOTTOM-10,rover.y+dy));
+}
+
+// ─── Mine Detection ───────────────────────────────────────
+function checkMines(){
+  mines.forEach(m=>{
+    if(m.found) return;
+    if(Math.hypot(rover.x-m.x,rover.y-m.y)<SENSOR_R+m.r){
+      m.found=true; foundCount++;
+      craters.push({x:m.x,y:m.y,r:m.r+16});
+      document.getElementById('stat-found').textContent=`${foundCount} / ${NUM_MINES}`;
+      triggerAlert(m);
+    }
+  });
+}
+
+function triggerAlert(m){
+  halted=true; running=false;
+  document.getElementById('alert-overlay').classList.add('active');
+  setStatus('HALTED','#e74c3c');
+  document.getElementById('bt-cmd').textContent="'S' → STOP";
+  log(`💥 MINE at (${Math.round(m.x)}, ${Math.round(m.y)}) — 555-Timer triggered!`,'red');
+  log(`   HC-05 → Arduino: STOP command sent`,'red');
+  if(animId){cancelAnimationFrame(animId);animId=null;}
+}
+
+// ─── Loop ─────────────────────────────────────────────────
+function loop(){
+  if(halted) return;
+  if(manualMode) stepManual();
+  else { if(!running) return; stepAuto(); if(!running) return; }
+  checkMines(); if(halted) return;
+
+  trail.push({x:rover.x,y:rover.y});
+  if(trail.length>MAX_TRAIL) trail.shift();
+
+  const totalArea=(W-2*MARGIN)*(BOTTOM-MARGIN);
+  const pct=Math.min(99,Math.round(trail.length*ROVER_W*0.85/totalArea*100));
+  document.getElementById('stat-coverage').textContent=pct+'%';
+
+  draw();
+  animId=requestAnimationFrame(loop);
+}
+
+// ─── Controls ─────────────────────────────────────────────
+function startAuto(){
+  if(manualMode){log('Switch to AUTO mode first.','yellow');return;}
+  if(running) return;
+  halted=false; running=true;
+  document.getElementById('alert-overlay').classList.remove('active');
+  setStatus('RUNNING','#a8e063');
+  setStat('stat-mode',['S-CURVE','SPIRAL','RANDOM'][selectedMode]);
+  document.getElementById('bt-cmd').textContent="'F' → FORWARD";
+  if(!pathState||pathState.mode===undefined){
+    initPath(selectedMode);
+    log(`▶ Auto started — ${['S-Curve','Spiral','Random Sweep'][selectedMode]}`,'green');
+  } else {
+    log(`▶ Mission resumed — ${['S-Curve','Spiral','Random Sweep'][selectedMode]}`,'green');
+    log(`   HC-05 → Arduino: FORWARD`,'blue');
+  }
+  if(!animId) animId=requestAnimationFrame(loop);
+}
+
+function resumeSim(){
+  halted=false; running=!manualMode;
+  document.getElementById('alert-overlay').classList.remove('active');
+  setStatus(manualMode?'MANUAL':'RUNNING','#a8e063');
+  document.getElementById('bt-cmd').textContent="'F' → FORWARD";
+  log('▶ Mission resumed','green');
+  log('   HC-05 → Arduino: FORWARD','blue');
+  if(!animId) animId=requestAnimationFrame(loop);
+}
+
+function dismissAlert(){
+  document.getElementById('alert-overlay').classList.remove('active');
+  setStatus('PAUSED','#e67e22');
+  log('⚠ Alert dismissed. Press Start or drive manually to continue.','yellow');
+}
+
+function stopSim(reason='User stop',complete=false){
+  running=false; halted=false;
+  if(animId){cancelAnimationFrame(animId);animId=null;}
+  document.getElementById('alert-overlay').classList.remove('active');
+  setStatus(complete?'COMPLETE':'STOPPED',complete?'#3498db':'#e67e22');
+  document.getElementById('bt-cmd').textContent="'S' → STOP";
+  pathState={mode:undefined};
+  draw();
+  log(complete?`✔ ${reason}`:`⏹ E-Stop — ${reason}`,complete?'blue':'yellow');
+}
+
+function toggleManual(){
+  manualMode=!manualMode;
+  document.getElementById('btn-manual').classList.toggle('active',manualMode);
+  setStat('stat-ctrl',manualMode?'MANUAL':'AUTO',manualMode?'#a8e063':'#5a8a30');
+  if(manualMode){
+    running=false; halted=false; pathState={mode:undefined};
+    setStatus('MANUAL','#a8e063'); setStat('stat-mode','WASD');
+    document.getElementById('bt-cmd').textContent='WASD → DRIVE';
+    log('🕹 Manual control ON — WASD to drive','green');
+    if(!animId) animId=requestAnimationFrame(loop);
+  } else {
+    setStatus('IDLE','#5a7a4a'); setStat('stat-mode','—');
+    document.getElementById('bt-cmd').textContent='—';
+    if(animId){cancelAnimationFrame(animId);animId=null;}
+    draw();
+    log('🤖 Auto mode restored','');
+  }
+}
+
+function selectMode(m){
+  if(manualMode){log('Exit manual mode first.','yellow');return;}
+  selectedMode=m; pathState={mode:undefined};
+  document.querySelectorAll('.mode-btn').forEach((b,i)=>b.classList.toggle('active',i===m));
+  log(`Mode: ${['S-Curve Lawnmower','Spiral Outward','Random Sweep'][m]}`,'');
+}
+
+// ─── Keyboard ─────────────────────────────────────────────
+function litKey(k,on){ const e=document.getElementById('key-'+k); if(e) e.classList.toggle('lit',on); }
+
+document.addEventListener('keydown',e=>{
+  const k=e.key.toLowerCase();
+  if(!['w','a','s','d'].includes(k)) return;
+  e.preventDefault();
+  if(keys[k]) return;
+  keys[k]=true; litKey(k,true);
+  if(!manualMode) toggleManual();
+  if(halted) return;
+  if(!animId) animId=requestAnimationFrame(loop);
+});
+
+document.addEventListener('keyup',e=>{
+  const k=e.key.toLowerCase();
+  if(!['w','a','s','d'].includes(k)) return;
+  keys[k]=false; litKey(k,false);
+});
+
+// ─── Wire buttons ─────────────────────────────────────────
+document.getElementById('btn-start').onclick   = startAuto;
+document.getElementById('btn-stop').onclick    = ()=>stopSim('User initiated E-Stop');
+document.getElementById('btn-resume').onclick  = resumeSim;
+document.getElementById('btn-dismiss').onclick = dismissAlert;
+document.getElementById('btn-manual').onclick  = toggleManual;
+document.getElementById('btn-reset').onclick   = ()=>{
+  Object.keys(keys).forEach(k=>{keys[k]=false;litKey(k,false);});
+  if(manualMode){manualMode=false;document.getElementById('btn-manual').classList.remove('active');}
+  log('↺ Field reset.','');
+  init();
+};
+
+// ─── Boot ─────────────────────────────────────────────────
+init();
+log('MineBot v2.0 ready. Press WASD to drive manually, or select a mode and Start.','green');
+log('Hardware: Arduino Uno · L293D · HC-05 BT [9/10] · 555-Timer Detector','blue');
+log(`⚠ ${NUM_MINES} mines buried in the field. Sensor radius: ${SENSOR_R}px`,'yellow');
+</script>
+</body>
+</html>
